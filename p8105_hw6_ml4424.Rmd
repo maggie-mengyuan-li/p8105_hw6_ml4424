@@ -1,0 +1,98 @@
+---
+title: "p8105_hw6_ml4424"
+author: "Maggie Li (ml4424)"
+date: "12/8/2020"
+output: github_document
+---
+
+# Problem 1
+
+```{r load libraries and read in data and tidy}
+library(tidyverse)
+library(utils)
+library(ggplot2)
+
+homicides_dta = read_csv("data/homicide-data_2.csv", na = c("", "NA", "Unknown")) %>% 
+  mutate(city_state = str_c(city, state, sep = "_"),
+         solved = case_when(disposition == "Closed by arrest" ~ 1,
+                            disposition ==  "Closed without arrest" ~ 0,
+                            disposition == "Open/No arrest" ~ 0),
+         victim_age = as.numeric(victim_age)) %>% 
+  filter(city_state != "Tulsa_AL",
+         city_state != "Dallas_TX", 
+         city_state != "Phoenix_AZ", 
+         city_state != "Kansas City_MO",
+         victim_race %in% c("Black", "White")) %>% 
+  select(city_state, solved, victim_age, victim_race, victim_sex)
+homicides_dta
+```
+
+```{r run glm logistic regression on Baltimore}
+# baltimore df
+baltimore_df =
+  homicides_dta %>% 
+  filter(city_state == "Baltimore_MD")
+baltimore_df
+
+# run glm
+baltimore_glm = baltimore_df %>% 
+  glm(solved ~ victim_age + victim_sex + victim_race, 
+      data = ., family = binomial()) 
+
+baltimore_glm %>% 
+  broom::tidy() %>% 
+  mutate(OR = exp(estimate),
+         lower_ci = exp(estimate - 1.96*std.error),
+         upper_ci = exp(estimate + 1.96*std.error)) %>% 
+  select(term, 
+         log_OR = estimate, 
+         OR, lower_ci, upper_ci) %>% 
+  knitr::kable(digits = 3)
+
+```
+
+```{r run glm for all cities NOT WORKING}
+homicide_glm = homicides_dta %>% 
+  nest(data = -city_state) %>% # nest by each city into a new data col
+  mutate(
+    models = 
+      map(.x = data, 
+          ~glm(solved ~ victim_age + victim_sex + victim_race, 
+               data = .x, 
+               family = binomial())), #run model as a column
+    results = map(models, broom::tidy))  # results column
+
+# unique(homicides_dta$victim_race)
+# 
+# summary(homicide_glm)
+# 
+# homicide_glm  %>% 
+#   broom::tidy() %>% 
+#   mutate(OR = exp(estimate),
+#          lower_ci = exp(estimate - 1.96*std.error),
+#          upper_ci = exp(estimate + 1.96*std.error)) %>% 
+#   select(term, 
+#          log_OR = estimate, 
+#          OR, lower_ci, upper_ci) %>% 
+#   knitr::kable(digits = 3)
+```
+
+```{r}
+
+```
+
+
+# Problem 2
+
+```{r}
+birthweight =
+  read_csv("data/birthweight.csv") %>% 
+  mutate(frace = as.factor(frace),
+         mrace = as.factor(mrace)) #convert numeric to factor for race
+
+sum(is.na(birthweight)) # no missing data 
+
+# model for analysis
+# selected based on underlying hypothesis 
+```
+
