@@ -12,7 +12,7 @@ library(tidyverse)
 library(utils)
 library(ggplot2)
 
-homicides_dta = read_csv("data/homicide-data_2.csv", na = c("", "NA", "Unknown")) %>% 
+homicides_dta = read_csv("data/homicide-data.csv", na = c("", "NA", "Unknown")) %>% 
   mutate(city_state = str_c(city, state, sep = "_"),
          solved = case_when(disposition == "Closed by arrest" ~ 1,
                             disposition ==  "Closed without arrest" ~ 0,
@@ -46,13 +46,12 @@ baltimore_glm %>%
          upper_ci = exp(estimate + 1.96*std.error)) %>% 
   select(term, 
          log_OR = estimate, 
-         OR, lower_ci, upper_ci) %>% 
-  knitr::kable(digits = 3)
+         OR, lower_ci, upper_ci)
 
 ```
 
 ```{r run glm for all cities NOT WORKING}
-homicide_glm = homicides_dta %>% 
+models_results_df = homicides_dta %>% 
   nest(data = -city_state) %>% # nest by each city into a new data col
   mutate(
     models = 
@@ -60,26 +59,28 @@ homicide_glm = homicides_dta %>%
           ~glm(solved ~ victim_age + victim_sex + victim_race, 
                data = .x, 
                family = binomial())), #run model as a column
-    results = map(models, broom::tidy))  # results column
+    results = map(models, broom::tidy)) %>%  # results column
+  select(city_state, results) %>% 
+  unnest(results) %>%
+  mutate(OR = exp(estimate),
+         lower_ci = exp(estimate - 1.96*std.error),
+         upper_ci = exp(estimate + 1.96*std.error)) %>%
+  select(city_state,
+         term,
+         OR, lower_ci, upper_ci)
 
-# unique(homicides_dta$victim_race)
-# 
-# summary(homicide_glm)
-# 
-# homicide_glm  %>% 
-#   broom::tidy() %>% 
-#   mutate(OR = exp(estimate),
-#          lower_ci = exp(estimate - 1.96*std.error),
-#          upper_ci = exp(estimate + 1.96*std.error)) %>% 
-#   select(term, 
-#          log_OR = estimate, 
-#          OR, lower_ci, upper_ci) %>% 
-#   knitr::kable(digits = 3)
+models_results_df
 ```
 
-```{r}
-
-```
+```{r plot results}
+models_results_df %>% 
+  filter(term == "victim_sexMale") %>% 
+  mutate(city_state = fct_reorder(city_state, OR)) %>% 
+  ggplot(aes(x = city_state, y = OR)) +
+  geom_point() + 
+  geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+``` 
 
 
 # Problem 2
@@ -94,5 +95,7 @@ sum(is.na(birthweight)) # no missing data
 
 # model for analysis
 # selected based on underlying hypothesis 
+
+
 ```
 
