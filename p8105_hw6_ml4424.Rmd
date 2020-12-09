@@ -17,7 +17,8 @@ homicides_dta = read_csv("data/homicide-data.csv", na = c("", "NA", "Unknown")) 
          solved = case_when(disposition == "Closed by arrest" ~ 1,
                             disposition ==  "Closed without arrest" ~ 0,
                             disposition == "Open/No arrest" ~ 0),
-         victim_age = as.numeric(victim_age)) %>% 
+         victim_age = as.numeric(victim_age),
+         victim_race = as.factor(victim_race)) %>% 
   filter(city_state != "Tulsa_AL",
          city_state != "Dallas_TX", 
          city_state != "Phoenix_AZ", 
@@ -25,6 +26,11 @@ homicides_dta = read_csv("data/homicide-data.csv", na = c("", "NA", "Unknown")) 
          victim_race %in% c("Black", "White")) %>% 
   select(city_state, solved, victim_age, victim_race, victim_sex)
 homicides_dta
+
+# set race = white as referent
+
+homicides_dta$victim_race <- relevel(homicides_dta$victim_race,
+                                         ref = "White")
 ```
 
 ```{r run glm logistic regression on Baltimore}
@@ -50,7 +56,7 @@ baltimore_glm %>%
 
 ```
 
-```{r run glm for all cities NOT WORKING}
+```{r run glm for all cities}
 models_results_df = homicides_dta %>% 
   nest(data = -city_state) %>% # nest by each city into a new data col
   mutate(
@@ -74,28 +80,96 @@ models_results_df
 
 ```{r plot results}
 models_results_df %>% 
-  filter(term == "victim_sexMale") %>% 
+  filter(term == "victim_raceBlack") %>% # compare black to white victims
   mutate(city_state = fct_reorder(city_state, OR)) %>% 
   ggplot(aes(x = city_state, y = OR)) +
   geom_point() + 
   geom_errorbar(aes(ymin = lower_ci, ymax = upper_ci)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ``` 
-
+**Comments on plot**: For over half the states, there is a statistically significant association between the victim being Black and the likelihood of the homicide to go unsolved (i.e. closed without arrest or remain open/no arrest) vs. the victim being white. For instance, the odds that the homicide will remain unsolved for cases where the victim is Black in Baltimore, MD is 0.43 times the odds that the homicide will remain unsolved for cases where the victim is white.
 
 # Problem 2
 
-```{r}
+```{r read in and tidy data}
 birthweight =
   read_csv("data/birthweight.csv") %>% 
-  mutate(frace = as.factor(frace),
+  mutate(babysex = as.factor(babysex),
+         frace = as.factor(frace),
          mrace = as.factor(mrace)) #convert numeric to factor for race
 
 sum(is.na(birthweight)) # no missing data 
 
-# model for analysis
-# selected based on underlying hypothesis 
+unique(birthweight$malform)
+```
 
+
+```{r build my model}
+# model for analysis
+# selected based on underlying hypothesis, outcome = birthweight 
+
+# use model fit statistic F-test to see if model is a good fit
+our_model = birthweight %>% 
+  lm(bwt ~ gaweeks + momage + mrace + smoken + bhead + blength,
+     data = .) # F-statistic = 1293
+
+```
+
+```{r compare models}
+set.seed(12345)
+
+# split data into training and test data with 100 pairs
+cv_df = crossv_mc(birthweight, 100) 
+
+# compare CV results for all models
+cv_df = 
+  cv_df %>% 
+  mutate(
+    our_model = map(train, 
+                    ~lm(bwt ~ gaweeks + momage + mrace + smoken + bhead + blength, 
+                        data = .x)),
+    main_effects_model  = map(train, 
+                              ~lm(bwt ~ blength + gaweeks, data = .x)),
+    threeway_interx_model  = map(train, 
+                                 ~lm(bwt ~ bhead*blength*babysex, data = .))) %>% 
+  mutate(
+    rmse_our_model = map2_dbl(our_model, test, ~rmse(model = .x, data = .y)),
+    rmse_main_effects = map2_dbl(main_effects_model, test, ~rmse(model = .x, data = .y)),
+    rmse_interx = map2_dbl(threeway_interx_model, test, ~rmse(model = .x, data = .y)))
+cv_df
+```
+```{r violin plot to examine rmse}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
+
+**Comparing our model with the two others**: The distribution of the RMSE for our model appears to be better (i.e. lower on average over 100 different iterations of training and test data) than the main effects only and three-way interaction models specified in the assignment.
+
+
+# Problem 3
+
+```{r download data}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+```
+
+```{r}
 
 ```
 
