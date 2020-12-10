@@ -11,6 +11,7 @@ output: github_document
 library(tidyverse)
 library(utils)
 library(ggplot2)
+library(modelr)
 
 homicides_dta = read_csv("data/homicide-data.csv", na = c("", "NA", "Unknown")) %>% 
   mutate(city_state = str_c(city, state, sep = "_"),
@@ -184,9 +185,9 @@ weather_df
 ```
 
 ```{r linear regression model}
-# tmax = tmin
+# bootstrap 5000 times
 
-test_results = weather_df %>% 
+bootstrap_results = weather_df %>% 
   modelr::bootstrap(n = 5000) %>% # bootstrap from og data 
   mutate(
     models = map(strap, ~ lm(tmax ~ tmin, data = .x)),
@@ -195,25 +196,34 @@ test_results = weather_df %>%
   select(.id, coef_results, r2) %>% 
   unnest(coef_results, r2) 
 
-
 ```
 
 
 ```{r}
-test_wide = test_results %>% group_by(term) %>% 
+# get log summed betas for all bootstrapped data
+r2_logbeta_vals = bootstrap_results %>% 
+  select(.id, term, estimate, r.squared) %>% # get rid of all the other cols
   pivot_wider(names_from = term,
               values_from = estimate) %>% 
-  summarize(log_beta = log((Intercept) + tmin)) %>% # pivot wider to get separate columns for intercept and tmin beta
-  
-# manually extract columns and input them back
-  summarize(ci_lower_r2 = quantile(r.squared, 0.025), 
-            ci_upper_r2 = quantile(r.squared, 0.975),
-            ci_lower_betas = quantile(log()))
+  mutate(log_beta = log(tmin * `(Intercept)`)) # pivot wider to get separate columns for intercept and tmin beta
 
-test_results %>% 
-  group_by(term) %>% 
-  summarize(
-    ci_lower_r2 = quantile(r.squared, 0.025), 
-    ci_upper_r2 = quantile(r.squared, 0.975))
+
+# plot
+r2_logbeta_vals %>% ggplot(aes(x = log_beta)) + geom_density()
+r2_logbeta_vals %>% ggplot(aes(x = r.squared)) + geom_density()
 ```
 
+**Comments**: The distribution of the log of the product of the intercept and tmin parameter estimate peaks at around 2.02 and is roughly normally distributed. The distribution of the r squared values peaks at around 0.912 and is roughly normally distributed.
+
+
+```{r}
+# get 95% ci for both parameters
+r2_logbeta_vals %>% 
+  select(-.id) %>% 
+  summarize(ci_lower_r2 = quantile(r.squared, 0.025), 
+            ci_upper_r2 = quantile(r.squared, 0.975),
+            ci_lower_betas = quantile(log_beta, 0.025),
+            ci_upper_betas = quantile(log_beta, 0.975))
+```
+
+**Comments**: The 95% confidence interval for the r-squared value is (0.893, 0.927) and for the log of the product of the betas is (1.966, 2.059).
