@@ -196,11 +196,16 @@ test_results = weather_df %>%
   unnest(coef_results, r2) 
 
 
-test_results %>% 
-  group_by(.id) %>% 
-  summarize()
+```
+
+
+```{r}
+test_wide = test_results %>% group_by(term) %>% 
   pivot_wider(names_from = term,
-              values_from = estimate) %>% # pivot wider to get separate columns for intercept and tmin beta
+              values_from = estimate) %>% 
+  summarize(log_beta = log((Intercept) + tmin)) %>% # pivot wider to get separate columns for intercept and tmin beta
+  
+# manually extract columns and input them back
   summarize(ci_lower_r2 = quantile(r.squared, 0.025), 
             ci_upper_r2 = quantile(r.squared, 0.975),
             ci_lower_betas = quantile(log()))
