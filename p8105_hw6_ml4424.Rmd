@@ -110,10 +110,22 @@ unique(birthweight$malform)
 
 # use model fit statistic F-test to see if model is a good fit
 our_model = birthweight %>% 
-  lm(bwt ~ gaweeks + momage + mrace + smoken + bhead + blength,
-     data = .) # F-statistic = 1293
+  lm(bwt ~ mrace + smoken + bhead + blength,
+     data = .) # F-statistic = 1683
+summary(our_model)
+```
+
+```{r plot of model residuals against fitted values}
+birthweight %>% 
+  modelr::add_residuals(our_model) %>% # add residuals to birthweight data
+  modelr::add_predictions(our_model) %>% # add predictions to birthweight data
+  ggplot(aes(x = pred, y = resid)) + geom_point()
 
 ```
+
+**Steps to building model:** I chose to use an underlying hypothesis to drive my model building process. We know that exposure to certain environmental conditions and social determinants impact birth outcomes through stress responses, so I included smoking status and mother's race as predictor variables in the model. We also included baby head circumference and length at birth since these are highly correlated with birth weight.
+
+**Comments on plot**: The lower predicted birthweight values seem to skew positive in residual values. But there does not appear to be any signs that the relationship between the predictor variables in the model could have a non-linear relationship with birth weight.
 
 ```{r compare models}
 set.seed(12345)
@@ -167,9 +179,36 @@ weather_df =
     tmin = tmin / 10,
     tmax = tmax / 10) %>%
   select(name, id, everything())
+
+weather_df
 ```
 
-```{r}
+```{r linear regression model}
+# tmax = tmin
 
+test_results = weather_df %>% 
+  modelr::bootstrap(n = 5000) %>% # bootstrap from og data 
+  mutate(
+    models = map(strap, ~ lm(tmax ~ tmin, data = .x)),
+    coef_results = map(models, broom::tidy),
+    r2 = map(models, broom::glance)) %>%
+  select(.id, coef_results, r2) %>% 
+  unnest(coef_results, r2) 
+
+
+test_results %>% 
+  group_by(.id) %>% 
+  summarize()
+  pivot_wider(names_from = term,
+              values_from = estimate) %>% # pivot wider to get separate columns for intercept and tmin beta
+  summarize(ci_lower_r2 = quantile(r.squared, 0.025), 
+            ci_upper_r2 = quantile(r.squared, 0.975),
+            ci_lower_betas = quantile(log()))
+
+test_results %>% 
+  group_by(term) %>% 
+  summarize(
+    ci_lower_r2 = quantile(r.squared, 0.025), 
+    ci_upper_r2 = quantile(r.squared, 0.975))
 ```
 
